@@ -23,6 +23,11 @@ from aiogram.client.bot import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiohttp_socks import ProxyConnector
 
+# После создания bot = Bot(...)
+# Передаём bot в роутеры, которые его используют
+from handlers import order
+order.bot = bot  # ✅ Важно!
+
 # Настройка прокси (если нужен)
 # Если прокси не нужен — закомментируй этот блок
 # === НАСТРОЙКА ПРОКСИ ДЛЯ TELEGRAM ===
