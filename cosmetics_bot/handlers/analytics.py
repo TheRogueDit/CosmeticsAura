@@ -393,3 +393,4 @@ async def back_to_analytics(callback: CallbackQuery):
     """Вернуться в аналитику"""
     await analytics_main(callback)
     await callback.answer()
+
