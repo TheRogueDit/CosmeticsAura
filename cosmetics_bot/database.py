@@ -7,7 +7,6 @@ DB_NAME = "cosmetics.db"
 # ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
 # =============================================================================
 async def init_db():
-    """Создание всех таблиц"""
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -146,6 +145,36 @@ async def get_user_count():
         result = await cursor.fetchone()
         return result[0] if result else 0
 
+async def get_user_level(user_id: int):
+    """Получить уровень пользователя на основе покупок"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT total_purchases FROM users WHERE user_id = ?", (user_id,))
+        result = await cursor.fetchone()
+        
+        if not result:
+            return 1
+        
+        purchases = result[0] or 0
+        
+        # Уровни: 1 (0-1000), 2 (1001-5000), 3 (5001-10000), 4 (10001+)
+        if purchases >= 10000:
+            return 4
+        elif purchases >= 5000:
+            return 3
+        elif purchases >= 1000:
+            return 2
+        else:
+            return 1
+
+async def update_user_purchases(user_id: int, amount: float):
+    """Обновить сумму покупок пользователя"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "UPDATE users SET total_purchases = total_purchases + ? WHERE user_id = ?",
+            (amount, user_id)
+        )
+        await db.commit()
+
 # =============================================================================
 # ТОВАРЫ
 # =============================================================================
@@ -211,11 +240,9 @@ async def get_product_rating(product_id: int):
 # КОРЗИНА
 # =============================================================================
 async def get_cart(user_id: int):
-    """Получить корзину (алиас для get_cart_items)"""
     return await get_cart_items(user_id)
 
 async def get_cart_items(user_id: int):
-    """Получить товары в корзине пользователя"""
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute("""
             SELECT c.id, p.name, p.price, c.quantity, p.id as product_id
@@ -568,8 +595,7 @@ async def get_dashboard_stats():
             "revenue": total_revenue
         }
 
-async def track_event(user_id: int, event_type: str, data: str = None):
-    """Заглушка для аналитики событий"""
+async def track_event(user_id: int, event_type: str,  str = None):
     pass
 
 # =============================================================================
