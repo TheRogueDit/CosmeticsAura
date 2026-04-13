@@ -1,119 +1,100 @@
 from aiogram.fsm.state import State, StatesGroup
 
-# =============================================================================
-# ФОРМА ОФОРМЛЕНИЯ ЗАКАЗА
-# =============================================================================
-class OrderForm(StatesGroup):
-    address = State()
-    phone = State()
+# ============================================
+# ОФОРМЛЕНИЕ ЗАКАЗА
+# ============================================
 
-# =============================================================================
-# ФОРМА ОТЗЫВА
-# =============================================================================
-class ReviewForm(StatesGroup):
-    product_id = State()
-    rating = State()
-    text = State()
-    comment = State()
-    photo = State()
+class OrderState(StatesGroup):
+    """Состояния для оформления заказа"""
+    address_input = State()      # Ввод адреса
+    phone_input = State()        # Ввод телефона
+    bonus_choice = State()       # Выбор использования бонусов
+    promo_input = State()        # Ввод промокода
+    payment_method = State()     # Выбор способа оплаты
+    confirm = State()            # Подтверждение заказа
 
-# Алиас для совместимости
-ReviewState = ReviewForm
+# ============================================
+# ОТЗЫВЫ
+# ============================================
 
-# =============================================================================
-# ФОРМА ОБРАТНОЙ СВЯЗИ
-# =============================================================================
-class FeedbackForm(StatesGroup):
-    text = State()
+class ReviewState(StatesGroup):
+    """Состояния для создания отзыва"""
+    product_id = State()         # Выбор товара
+    rating = State()             # Оценка (звёзды)
+    comment = State()            # Текст отзыва
+    photo = State()              # Фото к отзыву
+    confirm = State()            # Подтверждение отправки
 
-# =============================================================================
-# АДМИНКА - ТОВАРЫ
-# =============================================================================
-class AdminProductForm(StatesGroup):
-    product_name = State()
-    product_desc = State()
-    product_price = State()
-    product_category = State()
-    product_photo = State()
-    product_stock = State()
+# ============================================
+# АДМИН-ПАНЕЛЬ: ТОВАРЫ
+# ============================================
 
-# Алиас для совместимости
-AdminProductState = AdminProductForm
+class AdminProductState(StatesGroup):
+    """Состояния для добавления товара"""
+    product_name = State()       # Название товара
+    product_desc = State()       # Описание
+    product_price = State()      # Цена
+    product_category = State()   # Категория
+    product_photo = State()      # Фото товара
+    product_stock = State()      # Количество на складе
 
-# =============================================================================
-# АДМИНКА - ПРОМОКОДЫ
-# =============================================================================
-class AdminPromoForm(StatesGroup):
-    promo_code = State()
-    promo_discount = State()
-    promo_min_order = State()
-    promo_max_uses = State()
-    promo_expires = State()
+# ============================================
+# АДМИН-ПАНЕЛЬ: ПРОМОКОДЫ
+# ============================================
 
-# Алиас для совместимости
-AdminPromoState = AdminPromoForm
+class AdminPromoState(StatesGroup):
+    """Состояния для создания промокода"""
+    promo_code = State()         # Код промокода
+    promo_discount = State()     # Процент скидки
+    promo_min_order = State()    # Минимальная сумма заказа
+    promo_expires = State()      # Срок действия
 
-# =============================================================================
-# АДМИНКА - РАССЫЛКИ
-# =============================================================================
-class AdminMailingForm(StatesGroup):
-    mailing_text = State()
-    mailing_photo = State()
-    mailing_confirm = State()
-    mailing_button_text = State()
-    mailing_button_url = State()
+# ============================================
+# АДМИН-ПАНЕЛЬ: РАССЫЛКИ
+# ============================================
 
-# Алиас для совместимости
-AdminMailingState = AdminMailingForm
+class AdminMailingState(StatesGroup):
+    """Состояния для создания рассылки"""
+    mailing_text = State()       # Текст сообщения
+    mailing_photo = State()      # Фото к рассылке
+    mailing_confirm = State()    # Подтверждение отправки
 
-# =============================================================================
-# АДМИНКА - ПОЛЬЗОВАТЕЛИ
-# =============================================================================
-class AdminUserForm(StatesGroup):
-    user_id = State()
-    message = State()
-    ban_reason = State()
-    bonus_amount = State()
+# ============================================
+# АДМИН-ПАНЕЛЬ: ПОЛЬЗОВАТЕЛИ
+# ============================================
 
-# Алиас для совместимости
-AdminUserState = AdminUserForm
+class AdminUserState(StatesGroup):
+    """Состояния для работы с пользователями"""
+    bonus_amount = State()       # Сумма бонусов для начисления
+    ban_reason = State()         # Причина блокировки
 
-# =============================================================================
-# АДМИНКА - ОТЗЫВЫ
-# =============================================================================
-class AdminReviewForm(StatesGroup):
-    review_id = State()
-    response = State()
+# ============================================
+# КОНКУРСЫ (АДМИН)
+# ============================================
 
-AdminReviewState = AdminReviewForm
+class AdminContestState(StatesGroup):
+    """Состояния для создания конкурса"""
+    contest_title = State()      # Название конкурса
+    contest_desc = State()       # Описание
+    contest_prize = State()      # Приз
+    contest_type = State()       # Тип конкурса
+    contest_end = State()        # Дата окончания
+    contest_channel = State()    # Канал для подписки
 
-# =============================================================================
-# АДМИНКА - КОНКУРСЫ
-# =============================================================================
-class AdminContestForm(StatesGroup):
-    title = State()
-    description = State()
-    prize = State()
-    end_date = State()
-    channel = State()
+# ============================================
+# ПОДДЕРЖКА
+# ============================================
 
-AdminContestState = AdminContestForm
+class SupportState(StatesGroup):
+    """Состояния для обращения в поддержку"""
+    support_message = State()    # Текст сообщения
+    support_photo = State()      # Фото (если нужно)
 
-# =============================================================================
+# ============================================
 # ПОИСК
-# =============================================================================
-class SearchForm(StatesGroup):
-    query = State()
+# ============================================
 
-# =============================================================================
-# ОПЛАТА
-# =============================================================================
-class PaymentForm(StatesGroup):
-    amount = State()
-    method = State()
+class SearchState(StatesGroup):
+    """Состояния для поиска товаров"""
+    search_query = State()       # Поисковый запрос
 
-# =============================================================================
-# КОРЗИНА
-# =============================================================================
-class CartForm(StatesGroup):
-    quantity = State()
