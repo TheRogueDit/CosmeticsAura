@@ -8,64 +8,77 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 # =============================================================================
-# КНОПКА "КАТАЛОГ" (текстовая из главного меню)
+# МАППИНГ КАТЕГОРИЙ (callback_data → название для отображения → название в БД)
 # =============================================================================
-@router.message(F.text == "🛒 Каталог")
-async def catalog_text(message: Message):
-    logger.info(f"📦 Catalog opened by user {message.from_user.id}")
-    await show_categories(message)
+CATEGORIES = {
+    "cat_cosmetics": {"name": "💄 Косметика", "db_name": "cosmetics"},
+    "cat_bads": {"name": "💊 БАДы", "db_name": "bads"},
+    "cat_body": {"name": "🧴 Уход за телом", "db_name": "body"},
+    "cat_sets": {"name": "🎁 Наборы", "db_name": "sets"},
+}
 
 # =============================================================================
-# КНОПКА "КАТАЛОГ" (callback из инлайн)
+# ТЕКСТОВАЯ КНОПКА "🛒 Каталог"
+# =============================================================================
+@router.message(F.text == "🛒 Каталог")
+async def catalog_from_main_menu(message: Message):
+    """Показать категории при нажатии на текстовую кнопку"""
+    logger.info(f"📦 Catalog from main menu: user {message.from_user.id}")
+    text = "📚 **Категории товаров:**\n\nВыберите раздел:"
+    await message.answer(text, reply_markup=catalog_keyboard(), parse_mode="Markdown")
+
+# =============================================================================
+# CALLBACK КНОПКА "Каталог"
 # =============================================================================
 @router.callback_query(F.data == "catalog")
 async def catalog_callback(callback: CallbackQuery):
-    logger.info(f"📦 Catalog callback by user {callback.from_user.id}")
-    await show_categories(callback)
+    """Показать категории по callback"""
+    logger.info(f"📦 Catalog callback: user {callback.from_user.id}")
+    text = "📚 **Категории товаров:**\n\nВыберите раздел:"
+    await callback.message.answer(text, reply_markup=catalog_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 # =============================================================================
-# ПОКАЗАТЬ КАТЕГОРИИ
-# =============================================================================
-async def show_categories(target: Message | CallbackQuery):
-    """Показать категории товаров"""
-    text = "📚 **Категории товаров:**\n\nВыберите раздел:"
-    
-    if isinstance(target, CallbackQuery):
-        await target.message.answer(text, reply_markup=catalog_keyboard(), parse_mode="Markdown")
-    else:
-        await target.answer(text, reply_markup=catalog_keyboard(), parse_mode="Markdown")
-
-# =============================================================================
-# ОБРАБОТКА КАТЕГОРИЙ
+# ОБРАБОТКА ВЫБОРА КАТЕГОРИИ
 # =============================================================================
 @router.callback_query(F.data.startswith("cat_"))
-async def show_category(callback: CallbackQuery):
-    """Показать товары категории"""
-    category_map = {
-        "cat_cosmetics": "cosmetics",
-        "cat_bads": "bads", 
-        "cat_body": "body",
-        "cat_sets": "sets"
-    }
+async def show_category_products(callback: CallbackQuery):
+    """Показать товары выбранной категории"""
+    cat_key = callback.data  # например, "cat_cosmetics"
     
-    category = category_map.get(callback.data)
-    if not category:
+    if cat_key not in CATEGORIES:
         await callback.answer("❌ Категория не найдена", show_alert=True)
         return
     
-    products = await get_products_by_category(category)
+    category = CATEGORIES[cat_key]
+    category_name = category["name"]        # "💄 Косметика"
+    db_category = category["db_name"]       # "cosmetics"
+    
+    logger.info(f"📦 Show category {category_name} (db: {db_category})")
+    
+    # Получаем товары ТОЛЬКО этой категории
+    products = await get_products_by_category(db_category)
     
     if not products:
-        await callback.answer("📭 В этой категории пока нет товаров", show_alert=True)
+        await callback.answer(f"📭 В категории {category_name} пока нет товаров", show_alert=True)
         return
     
-    text = f"📦 **{category.replace('_', ' ').title()}**\n\n"
-    for p in products[:10]:  # Показываем первые 10
-        pid, name, desc, price, cat, photo, stock = p[:7]
-        text += f"• {name} — {price} ₽ (остаток: {stock})\n"
+    # Формируем текст с товарами
+    text = f"{category_name}\n\n"
+    for p in products:
+        # p: (id, name, description, price, category, photo_id, stock, ...)
+        pid = p[0]
+        name = p[1]
+        price = p[3]
+        stock = p[6] if len(p) > 6 else 0
+        
+        stock_status = "✅" if stock > 10 else "⚠️" if stock > 0 else "❌"
+        text += f"{stock_status} {name} — {price} ₽ (остаток: {stock})\n"
     
-    await callback.message.answer(text, reply_markup=back_keyboard("catalog"), parse_mode="Markdown")
+    # Кнопка "Назад"
+    kb = back_keyboard("catalog")
+    
+    await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
 # =============================================================================
@@ -80,7 +93,7 @@ async def add_to_cart_handler(callback: CallbackQuery):
         
         await add_to_cart(user_id, product_id, 1)
         
-        # Получаем название товара для сообщения
+        # Получаем название товара
         product = await get_product_by_id(product_id)
         name = product[1] if product else "Товар"
         
@@ -96,7 +109,8 @@ async def add_to_cart_handler(callback: CallbackQuery):
 @router.callback_query(F.data == "back_catalog")
 async def back_to_catalog(callback: CallbackQuery):
     """Вернуться к категориям"""
-    await show_categories(callback)
+    text = "📚 **Категории товаров:**\n\nВыберите раздел:"
+    await callback.message.answer(text, reply_markup=catalog_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 @router.callback_query(F.data == "back_main")
