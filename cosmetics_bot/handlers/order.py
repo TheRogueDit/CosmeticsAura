@@ -174,3 +174,49 @@ async def handle_phone(message: Message):
         await message.answer("❌ Ошибка при оформлении. Попробуйте позже.")
         if user_id in checkout_steps:
             del checkout_steps[user_id]
+# =============================================================================
+# ТЕКСТОВАЯ КНОПКА "📦 Мои заказы"
+# =============================================================================
+@router.message(F.text == "📦 Мои заказы")
+async def my_orders_from_main_menu(message: Message):
+    """Показать заказы при нажатии на текстовую кнопку"""
+    user_id = message.from_user.id
+    await show_user_orders(message, user_id)
+
+# =============================================================================
+# CALLBACK КНОПКА "Мои заказы"
+# =============================================================================
+@router.callback_query(F.data == "my_orders")
+async def my_orders_callback(callback: CallbackQuery):
+    """Показать заказы по callback"""
+    user_id = callback.from_user.id
+    await show_user_orders(callback, user_id)
+    await callback.answer()
+
+# =============================================================================
+# ПОКАЗАТЬ ЗАКАЗЫ ПОЛЬЗОВАТЕЛЯ
+# =============================================================================
+async def show_user_orders(target: Message | CallbackQuery, user_id: int):
+    """Показать историю заказов"""
+    orders = await get_user_orders(user_id)
+    
+    if not orders:
+        text = "📦 **У вас пока нет заказов**\n\nСделайте первый заказ в каталоге!"
+    else:
+        text = "📦 **Ваши заказы:**\n\n"
+        for order in orders[:10]:
+            # order: (id, user_id, total_amount, bonus_used, status, payment_status, payment_method, address, phone, admin_group_message_id, created_at, updated_at)
+            oid = order[0]
+            total = order[2]
+            pay_status = order[5] if len(order) > 5 else 'pending'
+            created = order[10] if len(order) > 10 else 'N/A'
+            emoji = {"pending":"⏳","paid":"✅","shipped":"🚚","delivered":"📬","cancelled":"❌"}.get(pay_status,"❓")
+            text += f"№{oid} | {total} ₽ | {emoji} {pay_status}\n"
+            text += f"📅 {created[:16] if created != 'N/A' else 'N/A'}\n\n"
+    
+    kb = back_keyboard("main")
+    
+    if isinstance(target, CallbackQuery):
+        await target.message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    else:
+        await target.answer(text, reply_markup=kb, parse_mode="Markdown")
