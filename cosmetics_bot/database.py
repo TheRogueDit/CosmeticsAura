@@ -1266,3 +1266,4 @@ async def get_mailing_history(limit: int = 10):
             (limit,)
         )
         return await cursor.fetchall()
+
