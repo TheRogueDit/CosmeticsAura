@@ -31,6 +31,72 @@ async def process_address(message: Message, state: FSMContext):
         return
     
     await state.update_data(address=address)
+      
+        # === ОТПРАВКА УВЕДОМЛЕНИЙ ===
+    from config import ADMIN_GROUP_ID, ADMIN_IDS
+    from database import create_order, get_cart_items, clear_cart
+    
+    # Получаем данные из корзины
+    cart_items = await get_cart_items(user_id)
+    total = sum(item['price'] * item['quantity'] for item in cart_items)
+    
+    # Формируем текст с товарами
+    items_text = ""
+    for item in cart_items:
+        items_text += f"• {item['name']} x{item['quantity']} - {item['price'] * item['quantity']} ₽\n"
+    
+    # Создаём заказ в БД
+    order_id = await create_order(
+        user_id=user_id,
+        total=total,
+        items=items_text,
+        address=address,
+        payment_status="pending"
+    )
+    
+    # Очищаем корзину
+    await clear_cart(user_id)
+    
+    # Отправляем в группу админов
+    try:
+        await bot.send_message(
+            chat_id=ADMIN_GROUP_ID,
+            text=f"🔔 **НОВЫЙ ЗАКАЗ №{order_id}**\n\n"
+                 f"👤 Клиент: @{message.from_user.username}\n"
+                 f"📦 Товары:\n{items_text}"
+                 f"💰 Итого: {total} ₽\n"
+                 f"📍 Адрес: {address}",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"❌ Ошибка отправки в группу: {e}")
+    
+    # Отправляем каждому админу
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text=f"🔔 **Новый заказ №{order_id}**\n\n"
+                     f"👤 Клиент: @{message.from_user.username}\n"
+                     f"💰 Сумма: {total} ₽\n"
+                     f"📍 Адрес: {address}",
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            print(f"❌ Ошибка отправки админу {admin_id}: {e}")
+    
+    # Отправляем подтверждение пользователю
+    await message.answer(
+        f"✅ **ЗАКАЗ ОФОРМЛЕН!**\n\n"
+        f"📦 Номер: №{order_id}\n"
+        f"💰 Сумма: {total} ₽\n\n"
+        f"Менеджер свяжется с вами soon!",
+        parse_mode="Markdown"
+    )
+    
+    # Завершаем машину состояний
+    await state.clear()
+    # === КОНЕЦ ОТПРАВКИ ===
     
     await message.answer(
         "📱 Введите ваш **номер телефона**:\n"
