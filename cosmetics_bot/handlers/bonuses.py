@@ -1,46 +1,18 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from database import get_bonus_balance
-from keyboards import back_keyboard
-import logging
+from database import (
+    get_bonus_balance, get_bonus_history, get_user_level,
+    get_referral_code, get_referrals_count, add_bonus
+)
+from keyboards import bonus_menu_keyboard, back_keyboard
 
-logger = logging.getLogger(__name__)
-router = Router()
-
-# =============================================================================
-# ТЕКСТОВАЯ КНОПКА "🎁 Бонусы"
-# =============================================================================
-@router.message(F.text == "🎁 Бонусы")
-async def bonuses_from_main_menu(message: Message):
-    """Показать бонусы при нажатии на текстовую кнопку"""
-    user_id = message.from_user.id
-    balance = await get_bonus_balance(user_id)
-    
-    text = f"🎁 **Ваши бонусы:**\n\n💰 Баланс: {balance} б.\n\n"
-    text += "Бонусы начисляются с каждой покупки (5-15% от суммы)."
-    await message.answer(text, reply_markup=back_keyboard("main"), parse_mode="Markdown")
-
-# =============================================================================
-# ТЕКСТОВАЯ КНОПКА "🔥 Акции"
-# =============================================================================
-@router.message(F.text == "🔥 Акции")
-async def promotions_handler(message: Message):
-    """Показать акции"""
-    text = (
-        "🔥 **Текущие акции:**\n\n"
-        "• 🎁 WELCOME10 — скидка 10% на первый заказ\n"
-        "• 🚚 Бесплатная доставка от 5000 ₽\n"
-        "• 💰 Кешбэк 5-15% бонусами с каждой покупки\n\n"
-        "Следите за обновлениями в канале!"
-    )
-    await message.answer(text, reply_markup=back_keyboard("main"), parse_mode="Markdown")
 router = Router()
 
 # ============================================
 # КНОПКА БОНУСЫ
 # ============================================
 
-@router.message(F.text == "🎁 Общие бонусы")
+@router.message(F.text == "🎁 Бонусы")
 async def show_bonus_menu(message: Message):
     """Показать меню бонусов"""
     user_id = message.from_user.id
@@ -260,3 +232,4 @@ async def back_to_bonus(callback: CallbackQuery):
         parse_mode="Markdown"
     )
     await callback.answer()
+
