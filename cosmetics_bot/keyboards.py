@@ -352,3 +352,4 @@ def yes_no_keyboard(yes_callback: str, no_callback: str):
         [InlineKeyboardButton(text="❌ Нет", callback_data=no_callback)]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
