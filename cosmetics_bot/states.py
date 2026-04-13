@@ -8,16 +8,16 @@ class OrderForm(StatesGroup):
     phone = State()
 
 # =============================================================================
-# ФОРМА ОТЗЫВА (ReviewState = ReviewForm для совместимости)
+# ФОРМА ОТЗЫВА
 # =============================================================================
 class ReviewForm(StatesGroup):
     product_id = State()
     rating = State()
     text = State()
-    comment = State()  # ← ДОБАВЛЕНО для совместимости!
+    comment = State()
     photo = State()
 
-# ВАЖНО: Алиас для старого кода
+# Алиас для совместимости
 ReviewState = ReviewForm
 
 # =============================================================================
@@ -27,36 +27,93 @@ class FeedbackForm(StatesGroup):
     text = State()
 
 # =============================================================================
-# ФОРМА АДМИН-РАССЫЛКИ
+# АДМИНКА - ТОВАРЫ
 # =============================================================================
-class MailingForm(StatesGroup):
-    text = State()
-    photo = State()
+class AdminProductForm(StatesGroup):
+    product_name = State()
+    product_desc = State()
+    product_price = State()
+    product_category = State()
+    product_photo = State()
+    product_stock = State()
+
+# Алиас для совместимости
+AdminProductState = AdminProductForm
 
 # =============================================================================
-# ФОРМА ДОБАВЛЕНИЯ ТОВАРА
+# АДМИНКА - ПРОМОКОДЫ
 # =============================================================================
-class ProductForm(StatesGroup):
-    name = State()
-    description = State()
-    price = State()
-    category = State()
-    photo = State()
-    stock = State()
+class AdminPromoForm(StatesGroup):
+    promo_code = State()
+    promo_discount = State()
+    promo_min_order = State()
+    promo_max_uses = State()
+    promo_expires = State()
+
+# Алиас для совместимости
+AdminPromoState = AdminPromoForm
 
 # =============================================================================
-# ФОРМА ПРОМОКОДА
+# АДМИНКА - РАССЫЛКИ
 # =============================================================================
-class PromoCodeForm(StatesGroup):
-    code = State()
-    discount = State()
-    min_order = State()
+class AdminMailingForm(StatesGroup):
+    mailing_text = State()
+    mailing_photo = State()
+    mailing_confirm = State()
+    mailing_button_text = State()
+    mailing_button_url = State()
+
+# Алиас для совместимости
+AdminMailingState = AdminMailingForm
 
 # =============================================================================
-# ФОРМА КОНКУРСА
+# АДМИНКА - ПОЛЬЗОВАТЕЛИ
 # =============================================================================
-class ContestForm(StatesGroup):
+class AdminUserForm(StatesGroup):
+    user_id = State()
+    message = State()
+    ban_reason = State()
+    bonus_amount = State()
+
+# Алиас для совместимости
+AdminUserState = AdminUserForm
+
+# =============================================================================
+# АДМИНКА - ОТЗЫВЫ
+# =============================================================================
+class AdminReviewForm(StatesGroup):
+    review_id = State()
+    response = State()
+
+AdminReviewState = AdminReviewForm
+
+# =============================================================================
+# АДМИНКА - КОНКУРСЫ
+# =============================================================================
+class AdminContestForm(StatesGroup):
     title = State()
     description = State()
     prize = State()
     end_date = State()
+    channel = State()
+
+AdminContestState = AdminContestForm
+
+# =============================================================================
+# ПОИСК
+# =============================================================================
+class SearchForm(StatesGroup):
+    query = State()
+
+# =============================================================================
+# ОПЛАТА
+# =============================================================================
+class PaymentForm(StatesGroup):
+    amount = State()
+    method = State()
+
+# =============================================================================
+# КОРЗИНА
+# =============================================================================
+class CartForm(StatesGroup):
+    quantity = State()
