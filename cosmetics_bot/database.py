@@ -1,4 +1,6 @@
 import aiosqlite
+import random
+import string
 from datetime import datetime
 
 DB_NAME = "cosmetics.db"
@@ -15,7 +17,10 @@ async def init_db():
                 first_name TEXT,
                 bonus_balance REAL DEFAULT 0,
                 total_purchases REAL DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                referral_code TEXT UNIQUE,
+                referred_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (referred_by) REFERENCES users(user_id)
             )
         """)
         
@@ -121,11 +126,11 @@ async def init_db():
 # =============================================================================
 # ПОЛЬЗОВАТЕЛИ
 # =============================================================================
-async def add_user(user_id: int, username: str, first_name: str):
+async def add_user(user_id: int, username: str, first_name: str, referral_code: str = None, referred_by: int = None):
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
-            "INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?, ?, ?)",
-            (user_id, username, first_name)
+            "INSERT OR IGNORE INTO users (user_id, username, first_name, referral_code, referred_by) VALUES (?, ?, ?, ?, ?)",
+            (user_id, username, first_name, referral_code, referred_by)
         )
         await db.commit()
 
@@ -146,7 +151,6 @@ async def get_user_count():
         return result[0] if result else 0
 
 async def get_user_level(user_id: int):
-    """Получить уровень пользователя на основе покупок"""
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute("SELECT total_purchases FROM users WHERE user_id = ?", (user_id,))
         result = await cursor.fetchone()
@@ -156,7 +160,6 @@ async def get_user_level(user_id: int):
         
         purchases = result[0] or 0
         
-        # Уровни: 1 (0-1000), 2 (1001-5000), 3 (5001-10000), 4 (10001+)
         if purchases >= 10000:
             return 4
         elif purchases >= 5000:
@@ -167,13 +170,68 @@ async def get_user_level(user_id: int):
             return 1
 
 async def update_user_purchases(user_id: int, amount: float):
-    """Обновить сумму покупок пользователя"""
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             "UPDATE users SET total_purchases = total_purchases + ? WHERE user_id = ?",
             (amount, user_id)
         )
         await db.commit()
+
+async def generate_referral_code(user_id: int):
+    """Сгенерировать реферальный код для пользователя"""
+    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "UPDATE users SET referral_code = ? WHERE user_id = ?",
+            (code, user_id)
+        )
+        await db.commit()
+    return code
+
+async def get_referral_code(user_id: int):
+    """Получить реферальный код пользователя"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT referral_code FROM users WHERE user_id = ?", (user_id,))
+        result = await cursor.fetchone()
+        
+        if result and result[0]:
+            return result[0]
+        
+        # Если кода нет - генерируем
+        code = await generate_referral_code(user_id)
+        return code
+
+async def get_user_by_referral_code(code: str):
+    """Найти пользователя по реферальному коду"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT * FROM users WHERE referral_code = ?", (code,))
+        return await cursor.fetchone()
+
+async def set_referral(user_id: int, referred_by: int):
+    """Установить реферала для пользователя"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "UPDATE users SET referred_by = ? WHERE user_id = ?",
+            (referred_by, user_id)
+        )
+        await db.commit()
+
+async def get_referral_stats(user_id: int):
+    """Получить статистику рефералов пользователя"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM users WHERE referred_by = ?",
+            (user_id,)
+        )
+        count = (await cursor.fetchone())[0]
+        
+        cursor = await db.execute(
+            "SELECT SUM(total_purchases) FROM users WHERE referred_by = ?",
+            (user_id,)
+        )
+        total = (await cursor.fetchone())[0] or 0
+        
+        return {"count": count, "total_purchases": total}
 
 # =============================================================================
 # ТОВАРЫ
