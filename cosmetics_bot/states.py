@@ -14,6 +14,7 @@ class ReviewForm(StatesGroup):
     product_id = State()
     rating = State()
     text = State()
+    comment = State()  # ← ДОБАВЛЕНО для совместимости!
     photo = State()
 
 # ВАЖНО: Алиас для старого кода
