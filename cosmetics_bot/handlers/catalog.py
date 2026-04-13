@@ -202,16 +202,3 @@ async def product_review(callback: CallbackQuery):
         show_alert=True
     )
 
-# =============================================================================
-# ОТЛАДКА: ЛОВИМ ВСЕ НЕОБРАБОТАННЫЕ СОБЫТИЯ
-# =============================================================================
-@router.callback_query()
-async def debug_unhandled_callback(callback: CallbackQuery):
-    """Ловит ВСЕ необработанные callback для отладки"""
-    user_id = callback.from_user.id
-    data = callback.data
-    
-    logger.warning(f"🔍 UNHANDLED CALLBACK: user={user_id}, data='{data}'")
-    
-    # Показываем пользователю, что мы "видим" нажатие
-    await callback.answer(f"🔍 Отладка: '{data}'", show_alert=True)
