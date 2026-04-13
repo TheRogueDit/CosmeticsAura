@@ -410,3 +410,25 @@ async def back_to_cart(callback: CallbackQuery):
     )
     await view_cart(fake_msg)
     await callback.answer()
+
+# === ОБРАБОТКА КНОПКИ "МОИ ЗАКАЗЫ" ===
+@dp.callback_query(F.data == "my_orders")
+async def my_orders_callback(callback: CallbackQuery, state: FSMContext):
+    """Показать заказы пользователя"""
+    from database import get_user_orders
+    
+    user_id = callback.from_user.id
+    orders = await get_user_orders(user_id)
+    
+    if not orders:
+        await callback.message.answer("📦 У вас пока нет заказов")
+    else:
+        text = "📦 **Ваши заказы:**\n\n"
+        for order in orders:
+            # order[0] = id, order[4] = total_amount, order[5] = status
+            text += f"№{order[0]} | {order[4]} ₽ | Статус: {order[5]}\n"
+            text += f"📍 {order[3]}\n\n"
+        await callback.message.answer(text, parse_mode="Markdown")
+    
+    await callback.answer()
+# === КОНЕЦ ОБРАБОТКИ ===
