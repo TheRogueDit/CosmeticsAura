@@ -46,3 +46,16 @@ async def back_main(callback: CallbackQuery):
         reply_markup=main_menu(is_admin)
     )
     await callback.answer()
+# =============================================================================
+# ТЕКСТОВАЯ КНОПКА "👩‍⚕️ Менеджер"
+# =============================================================================
+@router.message(F.text == "👩‍⚕️ Менеджер")
+async def manager_handler(message: Message):
+    """Связь с менеджером"""
+    text = (
+        "👩‍⚕️ **Связь с менеджером**\n\n"
+        "📞 Напишите нам напрямую: @CosmeticsAura_support\n\n"
+        "💬 Мы ответим в течение 15 минут!\n\n"
+        "🕐 Режим работы: Пн-Вс 9:00-21:00 МСК"
+    )
+    await message.answer(text, reply_markup=back_keyboard("main"), parse_mode="Markdown")
