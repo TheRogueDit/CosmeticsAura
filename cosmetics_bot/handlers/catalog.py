@@ -1,129 +1,204 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from database import get_all_products, get_products_by_category, get_product_by_id, add_to_cart
+from database import get_products_by_category, get_product_by_id, add_to_cart
 from keyboards import catalog_keyboard, product_keyboard, back_keyboard
-import logging
+from database import track_event
 
-logger = logging.getLogger(__name__)
 router = Router()
 
-# =============================================================================
-# МАППИНГ КАТЕГОРИЙ (callback_data → название для отображения → название в БД)
-# =============================================================================
-CATEGORIES = {
-    "cat_cosmetics": {"name": "💄 Косметика", "db_name": "cosmetics"},
-    "cat_bads": {"name": "💊 БАДы", "db_name": "bads"},
-    "cat_body": {"name": "🧴 Уход за телом", "db_name": "body"},
-    "cat_sets": {"name": "🎁 Наборы", "db_name": "sets"},
-}
+# ============================================
+# КНОПКА КАТАЛОГ
+# ============================================
 
-# =============================================================================
-# ТЕКСТОВАЯ КНОПКА "🛒 Каталог"
-# =============================================================================
 @router.message(F.text == "🛒 Каталог")
-async def catalog_from_main_menu(message: Message):
-    """Показать категории при нажатии на текстовую кнопку"""
-    logger.info(f"📦 Catalog from main menu: user {message.from_user.id}")
-    text = "📚 **Категории товаров:**\n\nВыберите раздел:"
-    await message.answer(text, reply_markup=catalog_keyboard(), parse_mode="Markdown")
+async def show_catalog(message: Message):
+    """Показать категории товаров"""
+    await message.answer(
+        "📚 **Выберите категорию:**\n\n"
+        "У нас только сертифицированная продукция! ✨",
+        reply_markup=catalog_keyboard()
+    )
 
-# =============================================================================
-# CALLBACK КНОПКА "Каталог"
-# =============================================================================
-@router.callback_query(F.data == "catalog")
-async def catalog_callback(callback: CallbackQuery):
-    """Показать категории по callback"""
-    logger.info(f"📦 Catalog callback: user {callback.from_user.id}")
-    text = "📚 **Категории товаров:**\n\nВыберите раздел:"
-    await callback.message.answer(text, reply_markup=catalog_keyboard(), parse_mode="Markdown")
-    await callback.answer()
+# ============================================
+# ВЫБОР КАТЕГОРИИ
+# ============================================
 
-# =============================================================================
-# ОБРАБОТКА ВЫБОРА КАТЕГОРИИ
-# =============================================================================
 @router.callback_query(F.data.startswith("cat_"))
-async def show_category_products(callback: CallbackQuery):
+async def category_selected(callback: CallbackQuery):
     """Показать товары выбранной категории"""
-    cat_key = callback.data  # например, "cat_cosmetics"
+    category_map = {
+        "cat_cosmetics": "cosmetics",
+        "cat_bads": "bads",
+        "cat_body": "body",
+        "cat_sets": "sets"
+    }
     
-    if cat_key not in CATEGORIES:
+    category = category_map.get(callback.data)
+    if not category:
         await callback.answer("❌ Категория не найдена", show_alert=True)
         return
     
-    category = CATEGORIES[cat_key]
-    category_name = category["name"]        # "💄 Косметика"
-    db_category = category["db_name"]       # "cosmetics"
-    
-    logger.info(f"📦 Show category {category_name} (db: {db_category})")
-    
-    # Получаем товары ТОЛЬКО этой категории
-    products = await get_products_by_category(db_category)
+    products = await get_products_by_category(category)
     
     if not products:
-        await callback.answer(f"📭 В категории {category_name} пока нет товаров", show_alert=True)
+        await callback.answer(
+            "📭 В этой категории пока нет товаров",
+            show_alert=True
+        )
         return
     
-    # Формируем текст с товарами
-    text = f"{category_name}\n\n"
-    for p in products:
-        # p: (id, name, description, price, category, photo_id, stock, ...)
-        pid = p[0]
-        name = p[1]
-        price = p[3]
-        stock = p[6] if len(p) > 6 else 0
+    # Показываем товары
+    for product in products:
+        product_id, name, desc, price, cat, photo_id, stock, is_active = product[:8]
         
-        stock_status = "✅" if stock > 10 else "⚠️" if stock > 0 else "❌"
-        text += f"{stock_status} {name} — {price} ₽ (остаток: {stock})\n"
+        text = (
+            f"💎 **{name}**\n\n"
+            f"📝 {desc}\n\n"
+            f"💰 **{price} ₽**\n"
+            f"📦 В наличии: {stock} шт."
+        )
+        
+        # Если есть фото, отправляем с фото
+        if photo_id:
+            try:
+                await callback.message.answer_photo(
+                    photo=photo_id,
+                    caption=text,
+                    reply_markup=product_keyboard(product_id)
+                )
+                continue
+            except:
+                pass
+        
+        # Если фото нет или ошибка, отправляем текст
+        await callback.message.answer(
+            text,
+            reply_markup=product_keyboard(product_id)
+        )
     
-    # Кнопка "Назад"
-    kb = back_keyboard("catalog")
+    # Кнопка назад
+    await callback.message.answer(
+        "🔙 Выберите товар выше или вернитесь назад:",
+        reply_markup=back_keyboard("catalog")
+    )
     
-    await callback.message.answer(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
-# =============================================================================
-# ДОБАВИТЬ В КОРЗИНУ
-# =============================================================================
+# ============================================
+# ПРОСМОТР ТОВАРА
+# ============================================
+
+@router.callback_query(F.data.startswith("product_"))
+async def show_product(callback: CallbackQuery):
+    """Показать детали товара"""
+    try:
+        product_id = int(callback.data.split("_")[1])
+    except:
+        await callback.answer("❌ Ошибка", show_alert=True)
+        return
+    
+    product = await get_product_by_id(product_id)
+    
+    if not product:
+        await callback.answer("❌ Товар не найден", show_alert=True)
+        return
+    
+    pid, name, desc, price, category, photo_id, stock, is_active = product[:8]
+    
+    # Трекаем просмотр товара (аналитика)
+    await track_event(
+        callback.from_user.id,
+        "view_product",
+        {"product_id": product_id, "name": name}
+    )
+    
+    text = (
+        f"💎 **{name}**\n\n"
+        f"📝 {desc}\n\n"
+        f"💰 **{price} ₽**\n"
+        f"📦 В наличии: {stock} шт.\n\n"
+        f"⚠️ Не является лекарственным средством"
+    )
+    
+    if photo_id:
+        try:
+            await callback.message.answer_photo(
+                photo=photo_id,
+                caption=text,
+                reply_markup=product_keyboard(product_id)
+            )
+            await callback.answer()
+            return
+        except:
+            pass
+    
+    await callback.message.answer(
+        text,
+        reply_markup=product_keyboard(product_id)
+    )
+    await callback.answer()
+
+# ============================================
+# ДОБАВЛЕНИЕ В КОРЗИНУ
+# ============================================
+
 @router.callback_query(F.data.startswith("add_cart_"))
 async def add_to_cart_handler(callback: CallbackQuery):
     """Добавить товар в корзину"""
     try:
         product_id = int(callback.data.split("_")[2])
-        user_id = callback.from_user.id
-        
-        await add_to_cart(user_id, product_id, 1)
-        
-        # Получаем название товара
-        product = await get_product_by_id(product_id)
-        name = product[1] if product else "Товар"
-        
-        await callback.answer(f"✅ {name} добавлен в корзину!", show_alert=True)
-        
-    except Exception as e:
-        logger.error(f"❌ Add to cart error: {e}")
-        await callback.answer("❌ Ошибка при добавлении", show_alert=True)
+    except:
+        await callback.answer("❌ Ошибка", show_alert=True)
+        return
+    
+    product = await get_product_by_id(product_id)
+    
+    if not product:
+        await callback.answer("❌ Товар не найден", show_alert=True)
+        return
+    
+    # Проверяем наличие
+    if product[6] <= 0:  # stock
+        await callback.answer("❌ Товар закончился!", show_alert=True)
+        return
+    
+    # Добавляем в корзину
+    await add_to_cart(callback.from_user.id, product_id, 1)
+    
+    # Трекаем событие (аналитика)
+    await track_event(
+        callback.from_user.id,
+        "add_to_cart",
+        {"product_id": product_id, "name": product[1]}
+    )
+    
+    await callback.answer(
+        f"✅ {product[1]} добавлен в корзину!",
+        show_alert=True
+    )
 
-# =============================================================================
-# НАЗАД
-# =============================================================================
+# ============================================
+# НАЗАД В КАТАЛОГ
+# ============================================
+
 @router.callback_query(F.data == "back_catalog")
 async def back_to_catalog(callback: CallbackQuery):
     """Вернуться к категориям"""
-    text = "📚 **Категории товаров:**\n\nВыберите раздел:"
-    await callback.message.answer(text, reply_markup=catalog_keyboard(), parse_mode="Markdown")
-    await callback.answer()
-
-@router.callback_query(F.data == "back_main")
-async def back_to_main(callback: CallbackQuery):
-    """Вернуться в главное меню"""
-    from keyboards import main_menu
-    from config import ADMIN_IDS
-    
-    user_id = callback.from_user.id
-    is_admin = user_id in ADMIN_IDS
-    
-    await callback.message.answer(
-        "📱 **Главное меню**",
-        reply_markup=main_menu(is_admin)
+    await callback.message.edit_text(
+        "📚 **Выберите категорию:**",
+        reply_markup=catalog_keyboard()
     )
     await callback.answer()
+
+# ============================================
+# ОТЗЫВ О ТОВАРЕ (заглушка)
+# ============================================
+
+@router.callback_query(F.data.startswith("review_"))
+async def product_review(callback: CallbackQuery):
+    """Переход к отзыву о товаре"""
+    await callback.answer(
+        "📝 Чтобы оставить отзыв, перейдите в раздел «Отзывы»",
+        show_alert=True
+    )
+
