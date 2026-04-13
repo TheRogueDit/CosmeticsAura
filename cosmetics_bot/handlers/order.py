@@ -18,7 +18,7 @@ async def checkout_callback(callback: CallbackQuery, state: FSMContext):
     """Начало оформления заказа"""
     user_id = callback.from_user.id
     
-    cart_items = await get_cart_items(user_id)
+    cart_items = await get_cart(user_id)
     
     if not cart_items:
         await callback.message.answer("🛒 Ваша корзина пуста!")
@@ -28,14 +28,10 @@ async def checkout_callback(callback: CallbackQuery, state: FSMContext):
     total = 0
     items_text = "📦 **Ваш заказ:**\n\n"
     for item in cart_items:
-        if isinstance(item, dict):
-            name = item.get('name', 'Товар')
-            price = item.get('price', 0)
-            quantity = item.get('quantity', 1)
-        else:
-            name = item[1] if len(item) > 1 else 'Товар'
-            price = item[2] if len(item) > 2 else 0
-            quantity = item[3] if len(item) > 3 else 1
+        # item: (product_id, quantity, name, price)
+        name = item[2] if len(item) > 2 else 'Товар'
+        price = item[3] if len(item) > 3 else 0
+        quantity = item[1] if len(item) > 1 else 1
         
         total += price * quantity
         items_text += f"• {name} x{quantity} - {price * quantity} ₽\n"
@@ -82,7 +78,7 @@ async def process_phone(message: Message, state: FSMContext):
         data = await state.get_data()
         address = data.get("address", "Не указан")
         
-        cart_items = await get_cart_items(user_id)
+        cart_items = await get_cart(user_id)
         
         if not cart_items:
             await message.answer("❌ Корзина пуста!")
@@ -92,24 +88,19 @@ async def process_phone(message: Message, state: FSMContext):
         total = 0
         items_text = ""
         for item in cart_items:
-            if isinstance(item, dict):
-                name = item.get('name', 'Товар')
-                price = item.get('price', 0)
-                quantity = item.get('quantity', 1)
-            else:
-                name = item[1] if len(item) > 1 else 'Товар'
-                price = item[2] if len(item) > 2 else 0
-                quantity = item[3] if len(item) > 3 else 1
+            name = item[2] if len(item) > 2 else 'Товар'
+            price = item[3] if len(item) > 3 else 0
+            quantity = item[1] if len(item) > 1 else 1
             
             total += price * quantity
             items_text += f"• {name} x{quantity} - {price * quantity} ₽\n"
         
         order_id = await create_order(
             user_id=user_id,
-            total=total,
-            items=items_text,
+            total_amount=total,
+            bonus_used=0,
             address=f"{address}\n📞 Тел: {phone}",
-            payment_status="pending"
+            phone=phone
         )
         
         await clear_cart(user_id)
@@ -174,7 +165,7 @@ async def my_orders_callback(callback: CallbackQuery, state: FSMContext):
             order_id = order[0]
             total = order[2]
             status = order[5] if len(order) > 5 else 'pending'
-            created_at = order[6] if len(order) > 6 else 'N/A'
+            created_at = order[10] if len(order) > 10 else 'N/A'
             
             text += f"№{order_id} | {total} ₽ | {status}\n"
             text += f"📅 {created_at}\n\n"
