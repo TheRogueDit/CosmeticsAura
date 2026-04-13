@@ -1,11 +1,15 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from config import ADMIN_IDS
-from database import add_user, get_user
 from keyboards import main_menu
+from database import add_user, get_user, track_event
 
-router = Router()
+router = Router()  # ✅ ЭТА СТРОКА ОБЯЗАТЕЛЬНА!
+
+@router.message(Command("start"))
+async def cmd_start(message: Message, state: FSMContext):
+    # ... код ...
 
 # ============================================
 # КОМАНДА /START
