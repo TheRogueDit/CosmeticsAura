@@ -1,94 +1,94 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from states import OrderForm
-from config import BOT_TOKEN, ADMIN_IDS, ADMIN_GROUP_ID
+from config import ADMIN_IDS, ADMIN_GROUP_ID
 from database import get_cart, clear_cart, create_order, get_user_orders, update_user_purchases
 from keyboards import back_keyboard
 from aiogram import Bot
 import logging
 
 logger = logging.getLogger(__name__)
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=ADMIN_IDS[0])  # Временный, реальный будет в bot.py
 router = Router()
 
-# Хранилище для временных данных (вместо FSM, если оно не работает)
-user_checkout_data = {}
+# Простое хранилище шагов оформления (вместо FSM)
+checkout_steps = {}
 
 # =============================================================================
 # КНОПКА "ОФОРМИТЬ ЗАКАЗ"
 # =============================================================================
 @router.callback_query(F.data == "checkout")
-async def checkout_callback(callback: CallbackQuery, state: FSMContext):
-    """Начало оформления заказа"""
+async def checkout_start(callback: CallbackQuery):
     user_id = callback.from_user.id
-    logger.info(f"🛒 Checkout started for user {user_id}")
+    logger.info(f"🛒 Checkout start: user {user_id}")
     
-    cart_items = await get_cart(user_id)
-    if not cart_items:
-        await callback.message.answer("🛒 Ваша корзина пуста!")
-        await callback.answer()
+    cart = await get_cart(user_id)
+    if not cart:
+        await callback.answer("🛒 Корзина пуста!", show_alert=True)
         return
     
     # Считаем сумму
-    total = 0
-    items_text = "📦 **Ваш заказ:**\n\n"
-    for item in cart_items:
-        name = item[2] if len(item) > 2 else 'Товар'
-        price = item[3] if len(item) > 3 else 0
-        quantity = item[1] if len(item) > 1 else 1
-        total += price * quantity
-        items_text += f"• {name} x{quantity} - {price * quantity} ₽\n"
-    items_text += f"\n💰 **Итого: {total} ₽**"
+    total = sum(item[3] * item[1] for item in cart)  # price * quantity
+    items = "\n".join(f"• {item[2]} x{item[1]} - {item[3]*item[1]} ₽" for item in cart)
+    
+    # Сохраняем в хранилище
+    checkout_steps[user_id] = {
+        "step": "address",
+        "total": total,
+        "items": items,
+        "cart": cart
+    }
     
     await callback.message.answer(
-        items_text + "\n\n⚠️ Оплата 100% предоплатой.",
-        reply_markup=back_keyboard("main"),
+        f"📦 **Ваш заказ:**\n\n{items}\n\n💰 **Итого: {total} ₽**\n\n"
+        f"⚠️ Оплата 100% предоплатой.\n\n"
+        f"📍 **Введите адрес доставки:**",
         parse_mode="Markdown"
     )
-    
-    # Сохраняем данные во временное хранилище
-    user_checkout_data[user_id] = {"step": "address", "total": total, "items": items_text}
-    
-    await callback.message.answer("📍 **Введите адрес доставки:**")
     await callback.answer()
 
 # =============================================================================
-# ОБРАБОТКА АДРЕСА (через текстовый фильтр)
+# ОБРАБОТКА АДРЕСА (по тексту + шагу)
 # =============================================================================
-@router.message(lambda m: m.from_user.id in user_checkout_data and user_checkout_data[m.from_user.id].get("step") == "address")
-async def process_address(message: Message):
-    """Сохраняем адрес и запрашиваем телефон"""
+@router.message(lambda m: m.from_user.id in checkout_steps and checkout_steps[m.from_user.id].get("step") == "address")
+async def handle_address(message: Message):
     user_id = message.from_user.id
     address = message.text.strip()
+    
+    logger.info(f"📍 Address received: {address} from user {user_id}")
     
     if len(address) < 10:
         await message.answer("❌ Адрес слишком короткий. Введите полный адрес:")
         return
     
-    # Сохраняем адрес
-    user_checkout_data[user_id]["address"] = address
-    user_checkout_data[user_id]["step"] = "phone"
+    # Сохраняем адрес и переходим к телефону
+    checkout_steps[user_id]["address"] = address
+    checkout_steps[user_id]["step"] = "phone"
     
-    await message.answer("📱 **Введите номер телефона:**\nНапример: +7 (999) 123-45-67")
+    await message.answer(
+        f"✅ Адрес сохранен: {address}\n\n"
+        f"📱 **Теперь введите номер телефона:**\n"
+        f"Например: +7 (999) 123-45-67",
+        parse_mode="Markdown"
+    )
 
 # =============================================================================
-# ОБРАБОТКА ТЕЛЕФОНА
+# ОБРАБОТКА ТЕЛЕФОНА → создание заказа
 # =============================================================================
-@router.message(lambda m: m.from_user.id in user_checkout_data and user_checkout_data[m.from_user.id].get("step") == "phone")
-async def process_phone(message: Message):
-    """Создаём заказ и отправляем уведомления"""
+@router.message(lambda m: m.from_user.id in checkout_steps and checkout_steps[m.from_user.id].get("step") == "phone")
+async def handle_phone(message: Message):
     user_id = message.from_user.id
     phone = message.text.strip()
+    
+    logger.info(f"📱 Phone received: {phone} from user {user_id}")
     
     if len(phone) < 10 or not any(c.isdigit() for c in phone):
         await message.answer("❌ Введите корректный номер телефона:")
         return
     
-    data = user_checkout_data[user_id]
-    address = data.get("address", "Не указан")
-    total = data.get("total", 0)
-    items_text = data.get("items", "")
+    data = checkout_steps[user_id]
+    address = data["address"]
+    total = data["total"]
+    items = data["items"]
     
     try:
         # Создаём заказ
@@ -99,8 +99,9 @@ async def process_phone(message: Message):
             address=f"{address}\n📞 {phone}",
             phone=phone
         )
-        logger.info(f"✅ Order created: ID={order_id}")
+        logger.info(f"✅ Order #{order_id} created")
         
+        # Очищаем корзину и обновляем статистику
         await clear_cart(user_id)
         await update_user_purchases(user_id, total)
         
@@ -110,38 +111,37 @@ async def process_phone(message: Message):
         try:
             await bot.send_message(
                 chat_id=ADMIN_GROUP_ID,
-                text=f"🔔 **НОВЫЙ ЗАКАЗ №{order_id}**\n\n"
+                text=f"🔔 **НОВЫЙ ЗАКАЗ #{order_id}**\n\n"
                      f"👤 Клиент: @{message.from_user.username or 'нет'}\n"
                      f"📞 Телефон: {phone}\n"
-                     f"📦 Товары:\n{items_text}"
+                     f"📦 Товары:\n{items}\n"
                      f"💰 Итого: {total} ₽\n"
                      f"📍 Адрес: {address}",
                 parse_mode="Markdown"
             )
-            logger.info(f"✅ Sent to admin group {ADMIN_GROUP_ID}")
+            logger.info(f"✅ Sent to group {ADMIN_GROUP_ID}")
         except Exception as e:
-            logger.error(f"❌ Failed to send to group: {e}")
-            await message.answer(f"⚠️ Не удалось отправить уведомление в группу: {e}")
+            logger.error(f"❌ Group send error: {e}")
         
-        # 2. Каждому админу в ЛС
+        # 2. Админам в ЛС
         for admin_id in ADMIN_IDS:
             try:
                 await bot.send_message(
                     chat_id=admin_id,
-                    text=f"🔔 **Новый заказ №{order_id}**\n\n"
-                         f"👤 Клиент: @{message.from_user.username}\n"
-                         f"📞 Телефон: {phone}\n"
-                         f"💰 Сумма: {total} ₽\n"
-                         f"📍 Адрес: {address}",
+                    text=f"🔔 **Заказ #{order_id}**\n\n"
+                         f"👤 @{message.from_user.username}\n"
+                         f"📞 {phone}\n"
+                         f"💰 {total} ₽\n"
+                         f"📍 {address}",
                     parse_mode="Markdown"
                 )
                 logger.info(f"✅ Sent to admin {admin_id}")
             except Exception as e:
-                logger.error(f"❌ Failed to send to admin {admin_id}: {e}")
+                logger.error(f"❌ Admin {admin_id} send error: {e}")
         
         # 3. Подтверждение пользователю
         await message.answer(
-            f"✅ **ЗАКАЗ №{order_id} ОФОРМЛЕН!**\n\n"
+            f"✅ **ЗАКАЗ #{order_id} ОФОРМЛЕН!**\n\n"
             f"💰 Сумма: {total} ₽\n"
             f"📞 Телефон: {phone}\n"
             f"📍 Адрес: {address}\n\n"
@@ -149,49 +149,48 @@ async def process_phone(message: Message):
             parse_mode="Markdown"
         )
         
-        # Очищаем данные
-        del user_checkout_data[user_id]
+        # Удаляем из хранилища
+        del checkout_steps[user_id]
         
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: {e}")
-        await message.answer(f"❌ Ошибка при оформлении. Попробуйте позже.")
-        if user_id in user_checkout_data:
-            del user_checkout_data[user_id]
+        logger.error(f"❌ CRITICAL: {e}")
+        await message.answer("❌ Ошибка при оформлении. Попробуйте позже.")
+        if user_id in checkout_steps:
+            del checkout_steps[user_id]
 
 # =============================================================================
 # КНОПКА "МОИ ЗАКАЗЫ"
 # =============================================================================
 @router.callback_query(F.data == "my_orders")
-async def my_orders_callback(callback: CallbackQuery):
-    """Показать заказы пользователя"""
+async def my_orders(callback: CallbackQuery):
     user_id = callback.from_user.id
     orders = await get_user_orders(user_id)
     
     if not orders:
-        await callback.message.answer("📦 У вас пока нет заказов")
-    else:
-        text = "📦 **Ваши заказы:**\n\n"
-        for order in orders[:10]:
-            order_id = order[0]
-            total = order[2]
-            payment_status = order[5] if len(order) > 5 else 'pending'
-            created_at = order[10] if len(order) > 10 else 'N/A'
-            status_emoji = {"pending": "⏳", "paid": "✅", "shipped": "🚚", "delivered": "📬", "cancelled": "❌"}
-            text += f"№{order_id} | {total} ₽\n"
-            text += f"📦 Статус: {status_emoji.get(payment_status, '❓')} {payment_status}\n"
-            text += f"📅 {created_at[:16] if created_at != 'N/A' else 'N/A'}\n\n"
-        await callback.message.answer(text, parse_mode="Markdown")
+        await callback.answer("📦 У вас пока нет заказов", show_alert=True)
+        return
     
+    text = "📦 **Ваши заказы:**\n\n"
+    for order in orders[:10]:
+        oid, _, total, _, status, pay_status, _, addr, phone, _, created = order[:11]
+        emoji = {"pending":"⏳","paid":"✅","shipped":"🚚","delivered":"📬","cancelled":"❌"}.get(pay_status,"❓")
+        text += f"№{oid} | {total} ₽ | {emoji} {pay_status}\n📅 {created[:16] if created else 'N/A'}\n\n"
+    
+    await callback.message.answer(text, parse_mode="Markdown")
     await callback.answer()
 
 # =============================================================================
-# КНОПКА "ОТМЕНИТЬ"
+# СБРОС ОФОРМЛЕНИЯ
 # =============================================================================
 @router.callback_query(F.data == "cancel_order")
-async def cancel_order_callback(callback: CallbackQuery):
-    """Отмена оформления заказа"""
-    user_id = callback.from_user.id
-    if user_id in user_checkout_data:
-        del user_checkout_data[user_id]
-    await callback.message.answer("❌ Оформление заказа отменено")
-    await callback.answer()
+@router.message(F.text.lower() == "отмена")
+async def cancel_checkout(message: Message | CallbackQuery):
+    user_id = message.from_user.id if hasattr(message, 'from_user') else message.from_user.id
+    if user_id in checkout_steps:
+        del checkout_steps[user_id]
+    
+    if isinstance(message, CallbackQuery):
+        await message.message.answer("❌ Оформление отменено")
+        await message.answer()
+    else:
+        await message.answer("❌ Оформление отменено")
