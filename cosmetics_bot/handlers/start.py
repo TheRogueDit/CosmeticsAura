@@ -1,4 +1,5 @@
-from aiogram import Router, F, Command
+from aiogram import Router, F
+from aiogram.filters import Command  # ✅ Правильный импорт!
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from config import ADMIN_IDS
