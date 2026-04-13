@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from config import BOT_TOKEN, ADMIN_IDS, ADMIN_GROUP_ID
-from database import init_db, add_user, get_user
+from database import init_db, add_user, get_user, track_event
 from keyboards import main_menu
 
 # Импорт всех роутеров из обработчиков
