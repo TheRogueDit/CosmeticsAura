@@ -1,61 +1,86 @@
 from aiogram import Router, F
-from aiogram.filters import Command  # ✅ Правильный импорт!
 from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
+from aiogram.filters import Command
 from config import ADMIN_IDS
+from database import add_user, get_user
 from keyboards import main_menu
-from database import add_user, track_event
-import logging
 
-logger = logging.getLogger(__name__)
 router = Router()
 
+# ============================================
+# КОМАНДА /START
+# ============================================
+
 @router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext):
-    logger.info(f"📩 /start from user {message.from_user.id}")
-    await state.clear()
-    
+async def cmd_start(message: Message):
+    """Обработка команды /start"""
     user_id = message.from_user.id
     username = message.from_user.username
     first_name = message.from_user.first_name
     
+    # Добавляем пользователя в БД
     await add_user(user_id, username, first_name)
     
-    try:
-        await track_event(user_id, "user_started")
-    except:
-        pass
-    
+    # Проверяем, админ ли это
     is_admin = user_id in ADMIN_IDS
     
+    # Приветственное сообщение
     await message.answer(
         f"🌸 **Привет, {first_name}!**\n\n"
-        f"Добро пожаловать в магазин косметики!\n\n"
-        f"Выберите раздел:",
+        f"Добро пожаловать в магазин натуральной косметики и БАДов!\n\n"
+        f"✨ Только сертифицированная продукция\n"
+        f"🎁 Бонусы с каждой покупки\n"
+        f"🏆 Регулярные розыгрыши\n\n"
+        f"Выберите раздел в меню:",
         reply_markup=main_menu(is_admin),
         parse_mode="Markdown"
     )
 
-@router.callback_query(F.data == "back_main")
-async def back_main(callback: CallbackQuery):
-    user_id = callback.from_user.id
+# ============================================
+# КНОПКА ГЛАВНОГО МЕНЮ
+# ============================================
+
+@router.message(F.text == "🏠 Главное меню")
+async def back_to_main(message: Message):
+    """Возврат в главное меню"""
+    user_id = message.from_user.id
     is_admin = user_id in ADMIN_IDS
     
-    await callback.message.answer(
-        "📱 **Главное меню**",
-        reply_markup=main_menu(is_admin)
+    await message.answer(
+        "📱 **Главное меню**\n\nВыберите раздел:",
+        reply_markup=main_menu(is_admin),
+        parse_mode="Markdown"
     )
-    await callback.answer()
-# =============================================================================
-# ТЕКСТОВАЯ КНОПКА "👩‍⚕️ Менеджер"
-# =============================================================================
+
+# ============================================
+# КНОПКА МЕНЕДЖЕР
+# ============================================
+
 @router.message(F.text == "👩‍⚕️ Менеджер")
-async def manager_handler(message: Message):
+async def contact_manager(message: Message):
     """Связь с менеджером"""
-    text = (
-        "👩‍⚕️ **Связь с менеджером**\n\n"
-        "📞 Напишите нам напрямую: @CosmeticsAura_support\n\n"
-        "💬 Мы ответим в течение 15 минут!\n\n"
-        "🕐 Режим работы: Пн-Вс 9:00-21:00 МСК"
+    await message.answer(
+        "👩‍⚕️ **Наш специалист скоро ответит вам!**\n\n"
+        "Напишите ваш вопрос ниже, и мы перешлём его менеджеру 👇",
+        parse_mode="Markdown"
     )
-    await message.answer(text, reply_markup=back_keyboard("main"), parse_mode="Markdown")
+    # Здесь можно добавить пересылку сообщения админу
+
+# ============================================
+# КНОПКА АКЦИИ
+# ============================================
+
+@router.message(F.text == "🔥 Акции")
+async def show_promotions(message: Message):
+    """Показать акции"""
+    await message.answer(
+        "🔥 **Текущие акции:**\n\n"
+        "1️⃣ **Скидка 10%** на первый заказ\n"
+        "   Промокод: `WELCOME10`\n\n"
+        "2️⃣ **Бесплатная доставка** от 5000₽\n\n"
+        "3️⃣ **Наборы со скидкой 20%**\n"
+        "   В разделе «Наборы»\n\n"
+        "🎁 Следите за обновлениями!",
+        parse_mode="Markdown"
+    )
+
