@@ -13,12 +13,11 @@ router = Router()
 # =============================================================================
 # КНОПКА "ОФОРМИТЬ ЗАКАЗ"
 # =============================================================================
-@dp.callback_query(F.data == "checkout")
+@router.callback_query(F.data == "checkout")
 async def checkout_callback(callback: CallbackQuery, state: FSMContext):
     """Начало оформления заказа"""
     user_id = callback.from_user.id
     
-    # Проверяем корзину
     cart_items = await get_cart_items(user_id)
     
     if not cart_items:
@@ -26,7 +25,6 @@ async def checkout_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
     
-    # Считаем сумму
     total = 0
     items_text = "📦 **Ваш заказ:**\n\n"
     for item in cart_items:
@@ -81,11 +79,9 @@ async def process_phone(message: Message, state: FSMContext):
         phone = message.text.strip()
         user_id = message.from_user.id
         
-        # Получаем данные из state
         data = await state.get_data()
         address = data.get("address", "Не указан")
         
-        # Получаем товары из корзины
         cart_items = await get_cart_items(user_id)
         
         if not cart_items:
@@ -93,7 +89,6 @@ async def process_phone(message: Message, state: FSMContext):
             await state.clear()
             return
         
-        # Считаем сумму
         total = 0
         items_text = ""
         for item in cart_items:
@@ -109,7 +104,6 @@ async def process_phone(message: Message, state: FSMContext):
             total += price * quantity
             items_text += f"• {name} x{quantity} - {price * quantity} ₽\n"
         
-        # Создаём заказ в БД
         order_id = await create_order(
             user_id=user_id,
             total=total,
@@ -118,10 +112,8 @@ async def process_phone(message: Message, state: FSMContext):
             payment_status="pending"
         )
         
-        # Очищаем корзину
         await clear_cart(user_id)
         
-        # Отправляем в группу админов
         try:
             await bot.send_message(
                 chat_id=ADMIN_GROUP_ID,
@@ -136,7 +128,6 @@ async def process_phone(message: Message, state: FSMContext):
         except Exception as e:
             print(f"❌ Ошибка отправки в группу: {e}")
         
-        # Отправляем каждому админу
         for admin_id in ADMIN_IDS:
             try:
                 await bot.send_message(
@@ -151,7 +142,6 @@ async def process_phone(message: Message, state: FSMContext):
             except Exception as e:
                 print(f"❌ Ошибка отправки админу {admin_id}: {e}")
         
-        # Отправляем подтверждение пользователю
         await message.answer(
             f"✅ **ЗАКАЗ ОФОРМЛЕН!**\n\n"
             f"📦 Номер: №{order_id}\n"
@@ -161,7 +151,6 @@ async def process_phone(message: Message, state: FSMContext):
             parse_mode="Markdown"
         )
         
-        # Завершаем машину состояний
         await state.clear()
         
     except Exception as e:
@@ -171,7 +160,7 @@ async def process_phone(message: Message, state: FSMContext):
 # =============================================================================
 # КНОПКА "МОИ ЗАКАЗЫ"
 # =============================================================================
-@dp.callback_query(F.data == "my_orders")
+@router.callback_query(F.data == "my_orders")
 async def my_orders_callback(callback: CallbackQuery, state: FSMContext):
     """Показать заказы пользователя"""
     user_id = callback.from_user.id
@@ -181,8 +170,7 @@ async def my_orders_callback(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("📦 У вас пока нет заказов")
     else:
         text = "📦 **Ваши заказы:**\n\n"
-        for order in orders[:10]:  # Показываем последние 10
-            # order: (id, user_id, total_amount, items, address, status, created_at)
+        for order in orders[:10]:
             order_id = order[0]
             total = order[2]
             status = order[5] if len(order) > 5 else 'pending'
@@ -198,7 +186,7 @@ async def my_orders_callback(callback: CallbackQuery, state: FSMContext):
 # =============================================================================
 # КНОПКА "ОТМЕНИТЬ"
 # =============================================================================
-@dp.callback_query(F.data == "cancel_order")
+@router.callback_query(F.data == "cancel_order")
 async def cancel_order_callback(callback: CallbackQuery, state: FSMContext):
     """Отмена оформления заказа"""
     await state.clear()
