@@ -1,106 +1,156 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from database import get_cart, clear_cart, remove_from_cart, get_product_by_id
-from keyboards import cart_keyboard, back_keyboard
-import logging
+from keyboards import cart_keyboard, back_keyboard, cart_item_keyboard
 
-logger = logging.getLogger(__name__)
 router = Router()
 
-# =============================================================================
-# ТЕКСТОВАЯ КНОПКА "🛍 Корзина"
-# =============================================================================
+# ============================================
+# КНОПКА КОРЗИНА
+# ============================================
+
 @router.message(F.text == "🛍 Корзина")
-async def cart_from_main_menu(message: Message):
-    """Показать корзину при нажатии на текстовую кнопку"""
+async def show_cart(message: Message):
+    """Показать содержимое корзины"""
+    await view_cart(message)
+
+# ============================================
+# ПРОСМОТР КОРЗИНЫ
+# ============================================
+
+async def view_cart(message: Message):
+    """Отобразить корзину"""
     user_id = message.from_user.id
-    await show_cart_content(message, user_id)
-
-# =============================================================================
-# CALLBACK КНОПКА "Корзина"
-# =============================================================================
-@router.callback_query(F.data == "cart")
-async def cart_callback(callback: CallbackQuery):
-    """Показать корзину по callback"""
-    user_id = callback.from_user.id
-    await show_cart_content(callback, user_id)
-    await callback.answer()
-
-# =============================================================================
-# ПОКАЗАТЬ СОДЕРЖИМОЕ КОРЗИНЫ
-# =============================================================================
-async def show_cart_content(target: Message | CallbackQuery, user_id: int):
-    """Показать товары в корзине"""
-    cart = await get_cart(user_id)
+    cart_items = await get_cart(user_id)
     
-    if not cart:
-        text = "🛍 **Корзина пуста**\n\nДобавьте товары из каталога!"
-    else:
-        total = sum(item[3] * item[1] for item in cart)  # price * quantity
-        text = "🛍 **Ваша корзина:**\n\n"
-        for item in cart:
-            # item: (product_id, quantity, name, price)
-            name = item[2] if len(item) > 2 else 'Товар'
-            price = item[3] if len(item) > 3 else 0
-            qty = item[1] if len(item) > 1 else 1
-            text += f"• {name} x{qty} — {price * qty} ₽\n"
-        text += f"\n💰 **Итого: {total} ₽**"
-    
-    kb = cart_keyboard() if cart else back_keyboard("main")
-    
-    if isinstance(target, CallbackQuery):
-        await target.message.answer(text, reply_markup=kb, parse_mode="Markdown")
-    else:
-        await target.answer(text, reply_markup=kb, parse_mode="Markdown")
-
-# =============================================================================
-# ОЧИСТИТЬ КОРЗИНУ
-# =============================================================================
-@router.callback_query(F.data == "clear_cart")
-async def clear_cart_handler(callback: CallbackQuery):
-    """Очистить корзину"""
-    user_id = callback.from_user.id
-    await clear_cart(user_id)
-    await callback.answer("🗑 Корзина очищена!", show_alert=True)
-    await show_cart_content(callback, user_id)
-
-# =============================================================================
-# УДАЛИТЬ ТОВАР ИЗ КОРЗИНЫ
-# =============================================================================
-@router.callback_query(F.data.startswith("remove_cart_"))
-async def remove_from_cart_handler(callback: CallbackQuery):
-    """Удалить товар из корзины"""
-    try:
-        product_id = int(callback.data.split("_")[2])
-        user_id = callback.from_user.id
-        
-        await remove_from_cart(user_id, product_id)
-        await callback.answer("❌ Товар удалён", show_alert=True)
-        await show_cart_content(callback, user_id)
-    except:
-        await callback.answer("❌ Ошибка", show_alert=True)
-
-# =============================================================================
-# ОФОРМИТЬ ЗАКАЗ
-# =============================================================================
-@router.callback_query(F.data == "checkout")
-async def checkout_handler(callback: CallbackQuery):
-    """Начать оформление заказа"""
-    user_id = callback.from_user.id
-    cart = await get_cart(user_id)
-    
-    if not cart:
-        await callback.answer("🛍 Корзина пуста!", show_alert=True)
+    if not cart_items:
+        await message.answer(
+            "🛒 **Ваша корзина пуста**\n\n"
+            "Добавьте товары из каталога! 😊\n\n"
+            "👉 Нажмите «Каталог» в меню, чтобы выбрать товары.",
+            reply_markup=back_keyboard("catalog"),
+            parse_mode="Markdown"
+        )
         return
     
-    total = sum(item[3] * item[1] for item in cart)
+    total = 0
+    text = "🛒 **Ваша корзина:**\n\n"
+    
+    for item in cart_items:
+        product_id, quantity, name, price = item
+        item_total = price * quantity
+        total += item_total
+        
+        text += f"▫️ **{name}**\n"
+        text += f"   {quantity} шт. × {price} ₽ = **{item_total} ₽**\n\n"
+    
+    text += "━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"💰 **Итого: {total} ₽**\n\n"
+    text += "📦 Для оформления нажмите кнопку ниже:"
+    
+    await message.answer(
+        text,
+        reply_markup=cart_keyboard(),
+        parse_mode="Markdown"
+    )
+
+# ============================================
+# CALLBACK: ПРОСМОТР КОРЗИНЫ
+# ============================================
+
+@router.callback_query(F.data == "view_cart")
+async def view_cart_callback(callback: CallbackQuery):
+    """Показать корзину (callback)"""
+    await view_cart(callback.message)
+    await callback.answer()
+
+# ============================================
+# УДАЛЕНИЕ ТОВАРА ИЗ КОРЗИНЫ
+# ============================================
+
+@router.callback_query(F.data.startswith("remove_cart_"))
+async def remove_from_cart_callback(callback: CallbackQuery):
+    """Удалить конкретный товар из корзины"""
+    try:
+        product_id = int(callback.data.split("_")[2])
+    except:
+        await callback.answer("❌ Ошибка", show_alert=True)
+        return
+    
+    await remove_from_cart(callback.from_user.id, product_id)
+    
+    # Получаем название товара для уведомления
+    product = await get_product_by_id(product_id)
+    product_name = product[1] if product else "Товар"
+    
+    await callback.answer(f"❌ {product_name} удалён из корзины")
+    
+    # Обновляем вид корзины
+    # Создаём новый объект Message-подобный для совместимости
+    class FakeMessage:
+        def __init__(self, bot, chat, from_user):
+            self.bot = bot
+            self.chat = chat
+            self.from_user = from_user
+    
+    fake_msg = FakeMessage(
+        callback.bot,
+        callback.message.chat,
+        callback.from_user
+    )
+    await view_cart(fake_msg)
+
+# ============================================
+# ОЧИСТКА КОРЗИНЫ
+# ============================================
+
+@router.callback_query(F.data == "clear_cart")
+async def clear_cart_callback(callback: CallbackQuery):
+    """Очистить всю корзину"""
+    await clear_cart(callback.from_user.id)
+    
+    await callback.message.answer(
+        "🗑 **Корзина очищена!**\n\n"
+        "Хотите вернуться к покупкам?",
+        reply_markup=back_keyboard("catalog"),
+        parse_mode="Markdown"
+    )
+    
+    await callback.answer()
+
+# ============================================
+# ПЕРЕХОД К ОФОРМЛЕНИЮ
+# ============================================
+
+@router.callback_query(F.data == "checkout")
+async def start_checkout(callback: CallbackQuery):
+    """Начать оформление заказа"""
+    cart_items = await get_cart(callback.from_user.id)
+    
+    if not cart_items:
+        await callback.answer(
+            "🛒 Корзина пуста! Добавьте товары.",
+            show_alert=True
+        )
+        return
+    
+    # Считаем сумму
+    total = sum(item[3] * item[1] for item in cart_items)  # price * quantity
     
     await callback.message.answer(
         f"💳 **Оформление заказа**\n\n"
-        f"💰 Сумма: {total} ₽\n\n"
-        f"⚠️ Оплата 100% предоплатой.\n"
-        f"Менеджер свяжется с вами после подтверждения.\n\n"
-        f"📍 **Введите адрес доставки:**",
+        f"📦 Товаров в корзине: {len(cart_items)}\n"
+        f"💰 Сумма: **{total} ₽**\n\n"
+        f"⚠️ **Важно:** Оплата заказа 100% предоплатой.\n"
+        f"После оплаты менеджер свяжется с вами.\n\n"
+        f"Введите ваш **адрес доставки**:\n"
+        f"(Город, улица, дом, квартира)",
+        reply_markup=back_keyboard("cart"),
         parse_mode="Markdown"
     )
+    
     await callback.answer()
+    
+    # Здесь будет переход к состоянию OrderState.address_input
+    # Это обрабатывается в handlers/order.py
+
