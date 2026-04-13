@@ -1,0 +1,28 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+ADMIN_IDS = [
+    684685584,
+    991705821,
+    7902034731,
+]
+
+ADMIN_GROUP_ID = os.getenv("ADMIN_GROUP_ID", "-1003840667332")
+CHANNEL_ID = os.getenv("CHANNEL_ID", "@CosmeticsAura_Konkurs")
+
+YOOKASSA_SHOP_ID = os.getenv("YOOKASSA_SHOP_ID")
+YOOKASSA_SECRET_KEY = os.getenv("YOOKASSA_SECRET_KEY")
+YOOKASSA_RETURN_URL = "https://t.me/your_bot"
+
+ROBOKASSA_LOGIN = os.getenv("ROBOKASSA_LOGIN")
+ROBOKASSA_PASSWORD1 = os.getenv("ROBOKASSA_PASSWORD1")
+ROBOKASSA_PASSWORD2 = os.getenv("ROBOKASSA_PASSWORD2")
+
+DEFAULT_BONUS_PERCENT = 10
+MIN_ORDER_FOR_BONUS = 500
+MAX_BONUS_PAYMENT_PERCENT = 50
+LOG_LEVEL = "INFO"
